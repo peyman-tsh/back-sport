@@ -73,7 +73,7 @@ async function bootstrap() {
   }
 
   const port = process.env.PORT || 4000;
-  await app.listen(port);
+  await app.listen(port,'0.0.0.0');
   logger.log(`================================================================`);
   logger.log(`🚀 Headlight Backend is running at: http://localhost:${port}/api/v1`);
   logger.log(`📚 Swagger OpenAPI documentation at: http://localhost:${port}/docs`);
