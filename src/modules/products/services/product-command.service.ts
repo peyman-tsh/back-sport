@@ -1,133 +1,96 @@
-import {
-  Injectable,
-  Inject,
-  ConflictException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { INJECTION_TOKENS } from '../../../common/constants/tokens';
-import { IProductRepository } from '../interfaces/product-repository.interface';
+import { IProductCatalogRepository } from '../interfaces/product-repository.interface';
 import { Product } from '../schemas/product.schema';
 import { CreateProductDto } from '../dto/create-product.dto';
-import { ProductQueryService } from './product-query.service';
+import { UpdateProductDto } from '../dto/update-product.dto';
+import { IProductChangeNotifier } from '../interfaces/product-change-notifier.interface';
 
-/**
- * Single Responsibility Principle (SRP):
- * ProductCommandService is strictly responsible for mutating product state.
- */
 @Injectable()
 export class ProductCommandService {
   constructor(
     @Inject(INJECTION_TOKENS.PRODUCT_REPOSITORY)
-    private readonly productRepository: IProductRepository,
-    private readonly productQueryService: ProductQueryService,
+    private readonly productRepository: IProductCatalogRepository,
+    @Inject(INJECTION_TOKENS.PRODUCT_CHANGE_NOTIFIER)
+    private readonly notifier: IProductChangeNotifier,
   ) {}
 
-  private async notifyFrontendRevalidation(slug?: string) {
-    try {
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-      const secret = process.env.REVALIDATE_SECRET || 'lumix-secret-revalidate-token-2026';
-      await fetch(`${frontendUrl}/api/revalidate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-revalidate-secret': secret,
-        },
-        body: JSON.stringify({ path: slug ? `/products/${slug}` : '/products' }),
-      }).catch(() => null);
-    } catch {
-      // safe fallback
-    }
-  }
-
   async createProduct(dto: CreateProductDto): Promise<Product> {
-    const slugExists = await this.productRepository.exists({ slug: dto.slug.toLowerCase().trim() });
-    if (slugExists) {
-      throw new ConflictException(`محصولی با این شناسه لاتین (slug) قبلاً ثبت شده است.`);
+    const slug = dto.slug.toLowerCase().trim();
+    if (!slug) throw new BadRequestException('شناسه لاتین محصول الزامی است.');
+    this.validateStock(dto.stock);
+    if (await this.productRepository.exists({ slug })) {
+      throw new ConflictException('شناسه لاتین محصول تکراری است.');
     }
 
-    const created = await this.productRepository.create({
-      ...dto,
-      slug: dto.slug.toLowerCase().trim(),
-      isAvailable: dto.stock > 0,
-    });
-    this.productQueryService.invalidateCache();
-    this.notifyFrontendRevalidation(created.slug);
+    let created: Product;
+    try {
+      created = await this.productRepository.create({
+        ...dto,
+        slug,
+        isAvailable: dto.stock > 0,
+      });
+    } catch (error: unknown) {
+      this.rethrowDuplicateSlug(error);
+    }
+    this.notifier.notify(created.slug);
     return created;
   }
 
-  async updateProduct(id: string, dto: Partial<CreateProductDto>): Promise<Product> {
+  async updateProduct(id: string, dto: UpdateProductDto): Promise<Product> {
     const existing = await this.productRepository.findById(id);
-    if (!existing) {
-      throw new NotFoundException(`محصول یافت نشد.`);
+    if (!existing) throw new NotFoundException('محصول یافت نشد.');
+
+    const slug = dto.slug?.toLowerCase().trim();
+    if (slug === '') throw new BadRequestException('شناسه لاتین محصول الزامی است.');
+    if (dto.stock !== undefined) this.validateStock(dto.stock);
+    if (slug && slug !== existing.slug && await this.productRepository.exists({ slug })) {
+      throw new ConflictException('شناسه لاتین محصول تکراری است.');
     }
 
-    if (dto.slug && dto.slug !== existing.slug) {
-      const slugExists = await this.productRepository.exists({ slug: dto.slug });
-      if (slugExists) {
-        throw new ConflictException(`شناسه لاتین (slug) تکراری است.`);
-      }
+    const changes: Partial<Product> = { ...dto };
+    if (slug !== undefined) changes.slug = slug;
+    if (dto.stock !== undefined || dto.isAvailable !== undefined) {
+      changes.isAvailable = (dto.stock ?? existing.stock) > 0;
     }
 
-    const updated = await this.productRepository.update(id, dto);
-    if (!updated) {
-      throw new NotFoundException(`خطا در به‌روزرسانی محصول`);
+    let updated: Product | null;
+    try {
+      updated = await this.productRepository.update(id, changes);
+    } catch (error: unknown) {
+      this.rethrowDuplicateSlug(error);
     }
-    this.productQueryService.invalidateCache();
-    this.notifyFrontendRevalidation(updated.slug);
+    if (!updated) throw new NotFoundException('محصول یافت نشد.');
+    this.notifier.notify(existing.slug, updated.slug);
     return updated;
   }
 
   async deleteProduct(id: string): Promise<boolean> {
     const existing = await this.productRepository.findById(id);
-    if (!existing) {
-      throw new NotFoundException(`محصول یافت نشد.`);
+    if (!existing || !await this.productRepository.delete(id)) {
+      throw new NotFoundException('محصول یافت نشد.');
     }
-    const deleted = await this.productRepository.delete(id);
-    this.productQueryService.invalidateCache();
-    this.notifyFrontendRevalidation(existing.slug);
-    return deleted;
-  }
-
-  async deductStock(productId: string, quantity: number): Promise<boolean> {
-    if (quantity <= 0) {
-      throw new BadRequestException('تعداد نامعتبر است.');
-    }
-
-    const success = await this.productRepository.decrementStock(productId, quantity);
-    if (!success) {
-      throw new BadRequestException('موجودی انبار برای این کالا کافی نیست.');
-    }
+    this.notifier.notify(existing.slug);
     return true;
   }
 
-  async reserveStock(productId: string, quantity: number): Promise<boolean> {
-    if (quantity <= 0) {
-      throw new BadRequestException('تعداد درخواستی نامعتبر است.');
-    }
-    return this.productRepository.reserveStock(productId, quantity);
-  }
-
-  async releaseReservedStock(productId: string, quantity: number): Promise<boolean> {
-    if (quantity <= 0) return false;
-    return this.productRepository.releaseReservedStock(productId, quantity);
-  }
-
-  async finalizeReservedStock(productId: string, quantity: number): Promise<boolean> {
-    if (quantity <= 0) return false;
-    return this.productRepository.finalizeReservedStock(productId, quantity);
-  }
-
-  async updateStock(productId: string, stock: number): Promise<Product> {
-    if (stock < 0) {
-      throw new BadRequestException('تعداد موجودی انبار نمی‌تواند منفی باشد.');
-    }
-    const updated = await this.productRepository.updateStock(productId, stock);
-    if (!updated) {
-      throw new NotFoundException('محصول یافت نشد.');
-    }
-    this.productQueryService.invalidateCache();
-    this.notifyFrontendRevalidation(updated.slug);
+  async updateReviewStats(id: string, rating: number, reviewsCount: number): Promise<Product> {
+    const updated = await this.productRepository.update(id, { rating, reviewsCount });
+    if (!updated) throw new NotFoundException('محصول یافت نشد.');
+    this.notifier.notify(updated.slug);
     return updated;
+  }
+
+  private validateStock(stock: number): void {
+    if (!Number.isInteger(stock) || stock < 0) {
+      throw new BadRequestException('موجودی باید عدد صحیح نامنفی باشد.');
+    }
+  }
+
+  private rethrowDuplicateSlug(error: unknown): never {
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === 11000) {
+      throw new ConflictException('شناسه لاتین محصول تکراری است.');
+    }
+    throw error;
   }
 }

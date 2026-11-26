@@ -65,8 +65,4 @@ export class CreateOrderDto {
   @Type(() => ShippingAddressDto)
   shippingAddress: ShippingAddressDto;
 
-  @ApiProperty({ example: 'http://localhost:3000/checkout/verify' })
-  @IsString()
-  @IsNotEmpty()
-  callbackUrl: string;
 }

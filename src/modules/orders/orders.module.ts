@@ -4,8 +4,13 @@ import { Order, OrderSchema } from './schemas/order.schema';
 import { OrderController } from './controllers/order.controller';
 import { OrderQueryService } from './services/order-query.service';
 import { OrderCommandService } from './services/order-command.service';
+import { PaymentFinalizationService } from './services/payment-finalization.service';
+import { ReservationExpiryService } from './services/reservation-expiry.service';
+import { ReservationReleaseService } from './services/reservation-release.service';
+import { CheckoutService } from './services/checkout.service';
+import { PaymentVerificationService } from './services/payment-verification.service';
+import { FulfillmentService } from './services/fulfillment.service';
 import { OrderRepository } from './repositories/order.repository';
-import { MockPaymentGateway } from './adapters/mock-payment.gateway';
 import { ZarinpalPaymentGateway } from './adapters/zarinpal.gateway';
 import { INJECTION_TOKENS } from '../../common/constants/tokens';
 import { ProductsModule } from '../products/products.module';
@@ -19,7 +24,12 @@ import { ProductsModule } from '../products/products.module';
   providers: [
     OrderQueryService,
     OrderCommandService,
-    MockPaymentGateway,
+    CheckoutService,
+    PaymentVerificationService,
+    FulfillmentService,
+    PaymentFinalizationService,
+    ReservationExpiryService,
+    ReservationReleaseService,
     ZarinpalPaymentGateway,
     {
       provide: INJECTION_TOKENS.ORDER_REPOSITORY,
@@ -27,7 +37,7 @@ import { ProductsModule } from '../products/products.module';
     },
     {
       provide: INJECTION_TOKENS.PAYMENT_GATEWAY,
-      useClass: MockPaymentGateway,
+      useExisting: ZarinpalPaymentGateway,
     },
   ],
   exports: [

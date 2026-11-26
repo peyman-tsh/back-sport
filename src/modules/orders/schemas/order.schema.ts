@@ -61,6 +61,9 @@ export const ShippingAddressSchema = SchemaFactory.createForClass(ShippingAddres
 export class Order {
   id?: string;
 
+  @Prop({ required: true, index: true })
+  userId: string;
+
   @Prop({ required: true, unique: true, index: true })
   orderNumber: string;
 
@@ -106,4 +109,5 @@ export class Order {
 export const OrderSchema = SchemaFactory.createForClass(Order);
 
 OrderSchema.index({ 'shippingAddress.phoneNumber': 1 });
+OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ createdAt: -1 });

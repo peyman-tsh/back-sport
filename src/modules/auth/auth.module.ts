@@ -20,10 +20,7 @@ import { RolesGuard } from './guards/roles.guard';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        secret: config.get<string>(
-          'JWT_SECRET',
-          'lumix_sport_ultra_secure_jwt_secret_key_2026!',
-        ),
+        secret: config.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
           expiresIn: config.get<string>('JWT_EXPIRES_IN', '1d'),
         },

@@ -9,13 +9,18 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { ProductQueryService } from '../services/product-query.service';
 import { ProductCommandService } from '../services/product-command.service';
 import { FilterProductsDto } from '../dto/filter-products.dto';
 import { CreateProductDto } from '../dto/create-product.dto';
+import { UpdateProductDto } from '../dto/update-product.dto';
 import { FindByCarDto } from '../dto/by-car.dto';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 @ApiTags('Sport Products (لوازم اسپرت و تیونینگ خودرو)')
 @Controller('products')
@@ -63,6 +68,8 @@ export class ProductController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'افزودن کالای اسپرت جدید' })
   @HttpCode(HttpStatus.CREATED)
   async createProduct(@Body() dto: CreateProductDto) {
@@ -70,15 +77,19 @@ export class ProductController {
   }
 
   @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'به‌روزرسانی کالا' })
   async updateProduct(
     @Param('id') id: string,
-    @Body() dto: Partial<CreateProductDto>,
+    @Body() dto: UpdateProductDto,
   ) {
     return this.commandService.updateProduct(id, dto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'حذف کالا' })
   async deleteProduct(@Param('id') id: string) {
     return this.commandService.deleteProduct(id);

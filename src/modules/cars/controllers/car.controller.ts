@@ -9,12 +9,16 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 import { CarQueryService } from '../services/car-query.service';
 import { CarCommandService } from '../services/car-command.service';
 import { CreateCarSpecDto } from '../dto/create-car-spec.dto';
 import { SocketType } from '../../products/schemas/product.schema';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 @ApiTags('Cars & Bulb Fitment (پایه لامپ خودروها)')
 @Controller('cars')
@@ -58,6 +62,8 @@ export class CarController {
   }
 
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'ثبت مشخصات خودروی جدید (ادمین)' })
   @HttpCode(HttpStatus.CREATED)
   async createSpec(@Body() dto: CreateCarSpecDto) {
@@ -65,12 +71,16 @@ export class CarController {
   }
 
   @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'ویرایش مشخصات خودرو' })
   async updateSpec(@Param('id') id: string, @Body() dto: Partial<CreateCarSpecDto>) {
     return this.commandService.updateSpec(id, dto);
   }
 
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'حذف خودرو' })
   async deleteSpec(@Param('id') id: string) {
     return this.commandService.deleteSpec(id);

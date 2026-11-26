@@ -1,7 +1,8 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject } from '@nestjs/common';
 import { INJECTION_TOKENS } from '../../../common/constants/tokens';
-import { IProductRepository } from '../../products/interfaces/product-repository.interface';
+import { IProductQueryRepository } from '../../products/interfaces/product-repository.interface';
 import { Product } from '../../products/schemas/product.schema';
+import { ProductInventoryService } from '../../products/services/product-inventory.service';
 import {
   IAdminInventoryService,
   InventoryOverviewResult,
@@ -18,7 +19,8 @@ import {
 export class AdminInventoryService implements IAdminInventoryService {
   constructor(
     @Inject(INJECTION_TOKENS.PRODUCT_REPOSITORY)
-    private readonly productRepository: IProductRepository,
+    private readonly productRepository: IProductQueryRepository,
+    private readonly inventory: ProductInventoryService,
   ) {}
 
   async getInventoryOverview(query: {
@@ -90,33 +92,10 @@ export class AdminInventoryService implements IAdminInventoryService {
   }
 
   async updateProductStock(productId: string, newStock: number): Promise<Product> {
-    if (newStock < 0) {
-      throw new BadRequestException('موجودی انبار نمی‌تواند عدد منفی باشد.');
-    }
-
-    const updated = await this.productRepository.updateStock(productId, newStock);
-    if (!updated) {
-      throw new NotFoundException(`محصول با شناسه ${productId} در دیتابیس یافت نشد.`);
-    }
-
-    return updated;
+    return this.inventory.updateStock(productId, newStock);
   }
 
   async adjustProductStock(productId: string, delta: number): Promise<Product> {
-    const existing = await this.productRepository.findById(productId);
-    if (!existing) {
-      throw new NotFoundException(`محصول یافت نشد.`);
-    }
-
-    const currentStock = existing.stock || 0;
-    const finalStock = currentStock + delta;
-
-    if (finalStock < 0) {
-      throw new BadRequestException(
-        `موجودی فعلی (${currentStock}) کمتر از مقدار کسری (${Math.abs(delta)}) است.`,
-      );
-    }
-
-    return this.updateProductStock(productId, finalStock);
+    return this.inventory.adjustStock(productId, delta);
   }
 }

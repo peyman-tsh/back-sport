@@ -1,34 +1,23 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { INJECTION_TOKENS } from '../../../common/constants/tokens';
 import {
-  IProductRepository,
+  IProductQueryRepository,
   IProductFilterCriteria,
   IAvailableFilterSummary,
 } from '../interfaces/product-repository.interface';
 import { Product } from '../schemas/product.schema';
 import { FilterProductsDto } from '../dto/filter-products.dto';
 import { IPaginatedResult } from '../../../common/interfaces/repository.interface';
-
-interface CacheEntry<T> {
-  data: T;
-  expiresAt: number;
-}
+import { IProductCache } from '../interfaces/product-cache.interface';
 
 @Injectable()
 export class ProductQueryService {
-  private readonly slugCache = new Map<string, CacheEntry<Product>>();
-  private readonly filterCache = new Map<string, CacheEntry<IPaginatedResult<Product>>>();
-  private readonly CACHE_TTL_MS = 45000; // 45 seconds TTL to protect database pool
-
   constructor(
     @Inject(INJECTION_TOKENS.PRODUCT_REPOSITORY)
-    private readonly productRepository: IProductRepository,
+    private readonly productRepository: IProductQueryRepository,
+    @Inject(INJECTION_TOKENS.PRODUCT_CACHE)
+    private readonly cache: IProductCache,
   ) {}
-
-  invalidateCache() {
-    this.slugCache.clear();
-    this.filterCache.clear();
-  }
 
   async getFilteredProducts(dto: FilterProductsDto): Promise<IPaginatedResult<Product>> {
     const cacheKey = JSON.stringify({
@@ -37,10 +26,9 @@ export class ProductQueryService {
       limit: dto.limit || 12,
     });
 
-    const cached = this.filterCache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
-    }
+    const cached = this.cache.getFiltered(cacheKey);
+    if (cached) return cached;
+    const generation = this.cache.currentGeneration();
 
     const criteria: IProductFilterCriteria = {
       category: dto.category,
@@ -66,30 +54,23 @@ export class ProductQueryService {
       sortOrder: dto.sortOrder,
     });
 
-    this.filterCache.set(cacheKey, {
-      data: result,
-      expiresAt: Date.now() + this.CACHE_TTL_MS,
-    });
+    this.cache.setFiltered(cacheKey, result, generation);
 
     return result;
   }
 
   async getProductBySlug(slug: string): Promise<Product> {
     const normalizedSlug = slug.toLowerCase().trim();
-    const cached = this.slugCache.get(normalizedSlug);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.data;
-    }
+    const cached = this.cache.getSlug(normalizedSlug);
+    if (cached) return cached;
+    const generation = this.cache.currentGeneration();
 
     const product = await this.productRepository.findBySlug(normalizedSlug);
     if (!product) {
       throw new NotFoundException(`محصولی با شناسه "${slug}" یافت نشد.`);
     }
 
-    this.slugCache.set(normalizedSlug, {
-      data: product,
-      expiresAt: Date.now() + this.CACHE_TTL_MS,
-    });
+    this.cache.setSlug(normalizedSlug, product, generation);
 
     return product;
   }

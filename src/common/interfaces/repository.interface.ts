@@ -23,15 +23,14 @@ export interface IPaginatedResult<T> {
 
 export interface IReadableRepository<T> {
   findById(id: string): Promise<T | null>;
-  findBySlug(slug: string): Promise<T | null>;
-  findAll(filter?: Record<string, any>, options?: IPaginationOptions): Promise<IPaginatedResult<T>>;
-  count(filter?: Record<string, any>): Promise<number>;
-  exists(filter: Record<string, any>): Promise<boolean>;
+  findAll(filter?: Record<string, unknown>, options?: IPaginationOptions): Promise<IPaginatedResult<T>>;
+  count(filter?: Record<string, unknown>): Promise<number>;
+  exists(filter: Record<string, unknown>): Promise<boolean>;
 }
 
 export interface IWritableRepository<T> {
   create(item: Partial<T>): Promise<T>;
-  update(id: string, item: any): Promise<T | null>;
+  update(id: string, item: Partial<T>): Promise<T | null>;
   delete(id: string): Promise<boolean>;
 }
 

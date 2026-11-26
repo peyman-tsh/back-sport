@@ -13,10 +13,6 @@ export abstract class BaseMongoRepository<T, TDoc extends Document> implements I
     return this.model.findById(id).lean<T>().exec();
   }
 
-  async findBySlug(slug: string): Promise<T | null> {
-    return this.model.findOne({ slug } as FilterQuery<TDoc>).lean<T>().exec();
-  }
-
   async findAll(
     filter: FilterQuery<TDoc> = {},
     options: IPaginationOptions = {},
@@ -66,7 +62,7 @@ export abstract class BaseMongoRepository<T, TDoc extends Document> implements I
     return created.toObject() as unknown as T;
   }
 
-  async update(id: string, item: any): Promise<T | null> {
+  async update(id: string, item: Partial<T>): Promise<T | null> {
     return this.model
       .findByIdAndUpdate(id, item as UpdateQuery<TDoc>, { new: true, runValidators: true })
       .lean<T>()

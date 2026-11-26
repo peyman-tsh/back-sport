@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -12,6 +13,7 @@ const express = require('express');
 async function bootstrap() {
   const logger = new Logger('HeadlightBootstrap');
   const app = await NestFactory.create(AppModule);
+  const configService = app.get(ConfigService);
 
   // High Performance & Security Middlewares
   app.use(express.json({ limit: '1mb' }));
@@ -26,9 +28,10 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: '*',
+    origin: configService.get<string[]>('cors.origins', []),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false,
   });
 
   // Global Interceptors & Filters
@@ -64,8 +67,10 @@ async function bootstrap() {
     .addTag('Coupons & Discounts (کدهای تخفیف)', 'سیستم اعتبارسنجی و اعمال کدهای تخفیف درصدی و مقداری')
     .build();
 
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  if (configService.get<string>('environment') !== 'production') {
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup('docs', app, document);
+  }
 
   const port = process.env.PORT || 4000;
   await app.listen(port);

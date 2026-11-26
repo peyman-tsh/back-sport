@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException } from '@nestjs/common';
 import { INJECTION_TOKENS } from '../../../common/constants/tokens';
 import { IReviewRepository } from '../interfaces/review-repository.interface';
 import { CreateReviewDto } from '../dto/create-review.dto';
@@ -19,7 +19,10 @@ export class ReviewCommandService {
     private readonly productQueryService: ProductQueryService,
   ) {}
 
-  async submitReview(dto: CreateReviewDto): Promise<Review> {
+  async submitReview(
+    dto: CreateReviewDto,
+    user: { id: string; fullName: string },
+  ): Promise<Review> {
     let targetProductId = dto.productId;
     try {
       const product =
@@ -32,21 +35,25 @@ export class ReviewCommandService {
       // fallback
     }
 
-    const review = await this.reviewRepository.create({
-      ...dto,
-      productId: targetProductId,
-      cutOffLineScore: dto.cutOffLineScore || dto.rating,
-      beamThrowScore: dto.beamThrowScore || dto.rating,
-      fanNoiseScore: dto.fanNoiseScore || dto.rating,
-      isApproved: true, // Auto-approve for instant user feedback
-    });
-
-    // Recompute product rating & reviews count
-    const stats = await this.reviewRepository.getProductReviewAggregation(targetProductId);
-    await this.productCommandService.updateProduct(targetProductId, {
-      rating: stats.averageRating,
-      reviewsCount: stats.totalReviews,
-    } as any).catch(() => null);
+    let review: Review;
+    try {
+      review = await this.reviewRepository.create({
+        ...dto,
+        userId: user.id,
+        customerName: user.fullName,
+        productId: targetProductId,
+        cutOffLineScore: dto.cutOffLineScore || dto.rating,
+        beamThrowScore: dto.beamThrowScore || dto.rating,
+        fanNoiseScore: dto.fanNoiseScore || dto.rating,
+        isVerifiedBuyer: false,
+        isApproved: false,
+      });
+    } catch (error: any) {
+      if (error?.code === 11000) {
+        throw new ConflictException('You have already submitted a review for this product.');
+      }
+      throw error;
+    }
 
     return review;
   }
@@ -58,10 +65,11 @@ export class ReviewCommandService {
     }
 
     const stats = await this.reviewRepository.getProductReviewAggregation(review.productId);
-    await this.productCommandService.updateProduct(review.productId, {
-      rating: stats.averageRating,
-      reviewsCount: stats.totalReviews,
-    } as any);
+    await this.productCommandService.updateReviewStats(
+      review.productId,
+      stats.averageRating,
+      stats.totalReviews,
+    );
 
     return review;
   }

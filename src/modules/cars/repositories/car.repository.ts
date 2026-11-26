@@ -5,6 +5,7 @@ import { BaseMongoRepository } from '../../../common/repositories/base-mongo.rep
 import { CarBulbSpec, CarBulbSpecDocument } from '../schemas/car-bulb-spec.schema';
 import { ICarRepository } from '../interfaces/car-repository.interface';
 import { SocketType } from '../../products/schemas/product.schema';
+import { escapeRegExp } from '../../../common/utils/escape-regexp';
 
 @Injectable()
 export class CarRepository
@@ -25,7 +26,7 @@ export class CarRepository
 
   async findByMake(carMake: string): Promise<CarBulbSpec[]> {
     return this.carModelDoc
-      .find({ carMake: new RegExp(`^${carMake}$`, 'i') })
+      .find({ carMake: new RegExp(`^${escapeRegExp(carMake)}$`, 'i') })
       .sort({ carModel: 1 })
       .lean<CarBulbSpec[]>()
       .exec();
@@ -34,8 +35,8 @@ export class CarRepository
   async findSpec(carMake: string, carModel: string): Promise<CarBulbSpec | null> {
     return this.carModelDoc
       .findOne({
-        carMake: new RegExp(`^${carMake}$`, 'i'),
-        carModel: new RegExp(`^${carModel}$`, 'i'),
+        carMake: new RegExp(`^${escapeRegExp(carMake)}$`, 'i'),
+        carModel: new RegExp(`^${escapeRegExp(carModel)}$`, 'i'),
       })
       .lean<CarBulbSpec>()
       .exec();
@@ -51,7 +52,7 @@ export class CarRepository
   }
 
   async searchCars(query: string): Promise<CarBulbSpec[]> {
-    const reg = new RegExp(query, 'i');
+    const reg = new RegExp(escapeRegExp(query.slice(0, 100)), 'i');
     return this.carModelDoc
       .find({
         $or: [{ carMake: reg }, { carModel: reg }, { notes: reg }],

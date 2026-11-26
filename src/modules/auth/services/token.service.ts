@@ -18,8 +18,8 @@ export class TokenService implements ITokenService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {
-    this.jwtSecret = this.configService.get<string>('JWT_SECRET', 'lumix_sport_ultra_secure_jwt_secret_key_2026!');
-    this.refreshSecret = this.configService.get<string>('JWT_REFRESH_SECRET', 'lumix_sport_refresh_token_ultra_secret_key_2026!');
+    this.jwtSecret = this.configService.getOrThrow<string>('JWT_SECRET');
+    this.refreshSecret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
     this.accessExpiresIn = this.configService.get<string>('JWT_EXPIRES_IN', '1d');
     this.refreshExpiresIn = this.configService.get<string>('JWT_REFRESH_EXPIRES_IN', '7d');
   }

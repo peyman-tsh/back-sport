@@ -3,6 +3,7 @@ import {
   IsNotEmpty,
   IsEnum,
   IsNumber,
+  IsInt,
   IsOptional,
   IsArray,
   IsBoolean,
@@ -129,7 +130,7 @@ export class CreateProductDto {
   originalPrice?: number;
 
   @ApiProperty({ example: 35 })
-  @IsNumber()
+  @IsInt()
   @Min(0)
   stock: number;
 

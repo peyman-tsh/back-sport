@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { Model, FilterQuery, ClientSession } from 'mongoose';
 import { BaseMongoRepository } from '../../../common/repositories/base-mongo.repository';
 import { Product, ProductDocument } from '../schemas/product.schema';
 import {
@@ -9,6 +9,7 @@ import {
   IAvailableFilterSummary,
 } from '../interfaces/product-repository.interface';
 import { IPaginatedResult, IPaginationOptions } from '../../../common/interfaces/repository.interface';
+import { escapeRegExp } from '../../../common/utils/escape-regexp';
 
 @Injectable()
 export class ProductRepository
@@ -20,6 +21,10 @@ export class ProductRepository
     private readonly productModel: Model<ProductDocument>,
   ) {
     super(productModel);
+  }
+
+  async findBySlug(slug: string): Promise<Product | null> {
+    return this.productModel.findOne({ slug }).lean<Product>().exec();
   }
 
   async findFiltered(
@@ -37,11 +42,11 @@ export class ProductRepository
     }
 
     if (criteria.brand) {
-      filter.brand = new RegExp(`^${criteria.brand}$`, 'i');
+      filter.brand = new RegExp(`^${escapeRegExp(criteria.brand)}$`, 'i');
     }
 
     if (criteria.material) {
-      filter.material = new RegExp(criteria.material, 'i');
+      filter.material = new RegExp(escapeRegExp(criteria.material), 'i');
     }
 
     if (criteria.minPrice !== undefined || criteria.maxPrice !== undefined) {
@@ -50,15 +55,15 @@ export class ProductRepository
       if (criteria.maxPrice !== undefined) filter.price.$lte = criteria.maxPrice;
     }
 
-    if (criteria.minLumens) {
+    if (criteria.minLumens !== undefined) {
       filter.lumens = { $gte: criteria.minLumens };
     }
 
-    if (criteria.minWattage) {
+    if (criteria.minWattage !== undefined) {
       filter.wattage = { $gte: criteria.minWattage };
     }
 
-    if (criteria.colorTemperature) {
+    if (criteria.colorTemperature !== undefined) {
       filter.colorTemperature = criteria.colorTemperature;
     }
 
@@ -70,9 +75,9 @@ export class ProductRepository
     // Car compatibility filter
     if (criteria.carMake || criteria.carModel || criteria.position) {
       const elemMatch: Record<string, any> = {};
-      if (criteria.carMake) elemMatch.carMake = new RegExp(criteria.carMake, 'i');
-      if (criteria.carModel) elemMatch.carModel = new RegExp(criteria.carModel, 'i');
-      if (criteria.position) elemMatch.position = new RegExp(criteria.position, 'i');
+      if (criteria.carMake) elemMatch.carMake = new RegExp(escapeRegExp(criteria.carMake), 'i');
+      if (criteria.carModel) elemMatch.carModel = new RegExp(escapeRegExp(criteria.carModel), 'i');
+      if (criteria.position) elemMatch.position = new RegExp(escapeRegExp(criteria.position), 'i');
 
       filter.compatibility = { $elemMatch: elemMatch };
     }
@@ -91,11 +96,11 @@ export class ProductRepository
     position?: string,
   ): Promise<Product[]> {
     const elemMatch: Record<string, any> = {
-      carMake: new RegExp(carMake, 'i'),
-      carModel: new RegExp(carModel, 'i'),
+      carMake: new RegExp(escapeRegExp(carMake), 'i'),
+      carModel: new RegExp(escapeRegExp(carModel), 'i'),
     };
     if (position) {
-      elemMatch.position = new RegExp(position, 'i');
+      elemMatch.position = new RegExp(escapeRegExp(position), 'i');
     }
 
     return this.productModel
@@ -168,14 +173,19 @@ export class ProductRepository
     };
   }
 
-  async decrementStock(productId: string, quantity: number): Promise<boolean> {
+  async decrementStock(productId: string, quantity: number, session?: ClientSession): Promise<boolean> {
     const result = await this.productModel
       .updateOne(
         { _id: productId, stock: { $gte: quantity } },
-        {
-          $inc: { stock: -quantity, salesCount: quantity },
-        },
+        [
+          { $set: {
+            stock: { $subtract: ['$stock', quantity] },
+            isAvailable: { $gt: [{ $subtract: ['$stock', quantity] }, 0] },
+            salesCount: { $add: [{ $ifNull: ['$salesCount', 0] }, quantity] },
+          } },
+        ],
       )
+      .session(session || null)
       .exec();
 
     return result.modifiedCount > 0;
@@ -185,16 +195,20 @@ export class ProductRepository
     const result = await this.productModel
       .updateOne(
         { _id: productId, stock: { $gte: quantity } },
-        {
-          $inc: { stock: -quantity, reservedStock: quantity },
-        },
+        [
+          { $set: {
+            stock: { $subtract: ['$stock', quantity] },
+            isAvailable: { $gt: [{ $subtract: ['$stock', quantity] }, 0] },
+            reservedStock: { $add: [{ $ifNull: ['$reservedStock', 0] }, quantity] },
+          } },
+        ],
       )
       .exec();
 
     return result.modifiedCount > 0;
   }
 
-  async releaseReservedStock(productId: string, quantity: number): Promise<boolean> {
+  async releaseReservedStock(productId: string, quantity: number, session?: ClientSession): Promise<boolean> {
     const result = await this.productModel
       .updateOne(
         { _id: productId, reservedStock: { $gte: quantity } },
@@ -203,12 +217,13 @@ export class ProductRepository
           $set: { isAvailable: true },
         },
       )
+      .session(session || null)
       .exec();
 
     return result.modifiedCount > 0;
   }
 
-  async finalizeReservedStock(productId: string, quantity: number): Promise<boolean> {
+  async finalizeReservedStock(productId: string, quantity: number, session?: ClientSession): Promise<boolean> {
     const result = await this.productModel
       .updateOne(
         { _id: productId, reservedStock: { $gte: quantity } },
@@ -216,6 +231,7 @@ export class ProductRepository
           $inc: { reservedStock: -quantity, salesCount: quantity },
         },
       )
+      .session(session || null)
       .exec();
 
     return result.modifiedCount > 0;
@@ -231,6 +247,20 @@ export class ProductRepository
             isAvailable: newStock > 0,
           },
         },
+        { new: true },
+      )
+      .lean<Product>()
+      .exec();
+  }
+
+  async adjustStock(productId: string, delta: number): Promise<Product | null> {
+    return this.productModel
+      .findOneAndUpdate(
+        { _id: productId, stock: { $gte: Math.max(0, -delta) } },
+        [
+          { $set: { stock: { $add: ['$stock', delta] } } },
+          { $set: { isAvailable: { $gt: ['$stock', 0] } } },
+        ],
         { new: true },
       )
       .lean<Product>()

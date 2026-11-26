@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, FilterQuery } from 'mongoose';
+import { Model, FilterQuery, ClientSession } from 'mongoose';
 import { BaseMongoRepository } from '../../../common/repositories/base-mongo.repository';
 import { Order, OrderDocument, OrderStatus } from '../schemas/order.schema';
 import {
@@ -9,6 +9,7 @@ import {
   IOrderFinancialStats,
 } from '../interfaces/order-repository.interface';
 import { IPaginatedResult, IPaginationOptions } from '../../../common/interfaces/repository.interface';
+import { escapeRegExp } from '../../../common/utils/escape-regexp';
 
 @Injectable()
 export class OrderRepository
@@ -33,11 +34,11 @@ export class OrderRepository
     }
 
     if (criteria.customerPhone) {
-      filter['shippingAddress.phoneNumber'] = new RegExp(criteria.customerPhone, 'i');
+      filter['shippingAddress.phoneNumber'] = new RegExp(escapeRegExp(criteria.customerPhone), 'i');
     }
 
     if (criteria.orderNumber) {
-      filter.orderNumber = new RegExp(criteria.orderNumber, 'i');
+      filter.orderNumber = new RegExp(escapeRegExp(criteria.orderNumber), 'i');
     }
 
     if (criteria.startDate || criteria.endDate) {
@@ -66,17 +67,77 @@ export class OrderRepository
       .exec();
   }
 
+  async findByUserId(userId: string, limit = 20): Promise<Order[]> {
+    return this.orderModel
+      .find({ userId })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean<Order[]>()
+      .exec();
+  }
+
+  async markPaidIfPending(
+    orderId: string,
+    paymentRefId: string,
+    paidAt: Date,
+    session: ClientSession,
+  ): Promise<boolean> {
+    const result = await this.orderModel
+      .updateOne(
+        { _id: orderId, status: 'PENDING', isStockReserved: true },
+        {
+          $set: {
+            status: 'PAID',
+            isStockReserved: false,
+            paymentRefId,
+            paidAt,
+          },
+        },
+        { session },
+      )
+      .exec();
+    return result.modifiedCount === 1;
+  }
+
+  async expireReservationIfPending(orderId: string, session: ClientSession): Promise<Order | null> {
+    return this.orderModel
+      .findOneAndUpdate(
+        {
+          _id: orderId,
+          status: 'PENDING',
+          isStockReserved: true,
+          expiresAt: { $lt: new Date() },
+        },
+        { $set: { status: 'EXPIRED', isStockReserved: false } },
+        { new: false, session },
+      )
+      .lean<Order>()
+      .exec();
+  }
+
+  async cancelIfPending(orderId: string, session: ClientSession): Promise<Order | null> {
+    return this.orderModel
+      .findOneAndUpdate(
+        { _id: orderId, status: 'PENDING', isStockReserved: true },
+        { $set: { status: 'CANCELLED', isStockReserved: false } },
+        { new: false, session },
+      )
+      .lean<Order>()
+      .exec();
+  }
+
   async updateStatus(
     orderNumber: string,
     status: OrderStatus,
+    expectedStatus?: OrderStatus,
     metadata: { paymentRefId?: string; paidAt?: Date } = {},
   ): Promise<Order | null> {
-    const updatePayload: Record<string, any> = { status };
+    const updatePayload: { status: OrderStatus; paymentRefId?: string; paidAt?: Date } = { status };
     if (metadata.paymentRefId) updatePayload.paymentRefId = metadata.paymentRefId;
     if (metadata.paidAt) updatePayload.paidAt = metadata.paidAt;
 
     return this.orderModel
-      .findOneAndUpdate({ orderNumber }, { $set: updatePayload }, { new: true })
+      .findOneAndUpdate({ orderNumber, ...(expectedStatus ? { status: expectedStatus } : {}) }, { $set: updatePayload }, { new: true })
       .lean<Order>()
       .exec();
   }

@@ -13,6 +13,9 @@ export class Review {
   id?: string;
 
   @Prop({ required: true, index: true })
+  userId: string;
+
+  @Prop({ required: true, index: true })
   productId: string;
 
   @Prop({ required: true, trim: true })
@@ -42,13 +45,14 @@ export class Review {
   @Prop([String])
   disadvantages?: string[]; // نکات منفی
 
-  @Prop({ default: true })
+  @Prop({ default: false })
   isVerifiedBuyer: boolean;
 
-  @Prop({ default: true, index: true })
+  @Prop({ default: false, index: true })
   isApproved: boolean;
 }
 
 export const ReviewSchema = SchemaFactory.createForClass(Review);
 
 ReviewSchema.index({ productId: 1, isApproved: 1, createdAt: -1 });
+ReviewSchema.index({ productId: 1, userId: 1 }, { unique: true, sparse: true });

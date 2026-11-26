@@ -44,8 +44,20 @@ export class OrderQueryService {
     return order;
   }
 
+  async getOrderByNumberForUser(orderNumber: string, userId: string): Promise<Order> {
+    const order = await this.orderRepository.findByOrderNumber(orderNumber);
+    if (!order || order.userId !== userId) {
+      throw new NotFoundException('Order not found.');
+    }
+    return order;
+  }
+
   async getCustomerOrders(phone: string): Promise<Order[]> {
     return this.orderRepository.findByCustomerPhone(phone);
+  }
+
+  async getOrdersForUser(userId: string): Promise<Order[]> {
+    return this.orderRepository.findByUserId(userId);
   }
 
   async getFinancialReport(): Promise<IOrderFinancialStats> {

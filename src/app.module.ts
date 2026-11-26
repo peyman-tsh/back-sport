@@ -19,6 +19,31 @@ import { CategoriesModule } from './modules/categories/categories.module';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
+      validate: (env) => {
+        if (env.NODE_ENV === 'production') {
+          const required = [
+            'JWT_SECRET',
+            'JWT_REFRESH_SECRET',
+            'MONGODB_URI',
+            'CORS_ORIGINS',
+            'PAYMENT_CALLBACK_URL',
+            'ZARINPAL_MERCHANT_ID',
+            'FRONTEND_URL',
+            'REVALIDATE_SECRET',
+          ];
+          const missing = required.filter((key) => !env[key]?.trim());
+          if (missing.length > 0) {
+            throw new Error(`Missing required production environment variables: ${missing.join(', ')}`);
+          }
+          if (env.CORS_ORIGINS.split(',').some((origin: string) => origin.trim() === '*')) {
+            throw new Error('CORS_ORIGINS must not contain a wildcard in production.');
+          }
+          if (!env.PAYMENT_CALLBACK_URL.startsWith('https://')) {
+            throw new Error('PAYMENT_CALLBACK_URL must use HTTPS in production.');
+          }
+        }
+        return env;
+      },
     }),
     ThrottlerModule.forRoot([
       {

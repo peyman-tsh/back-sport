@@ -8,7 +8,7 @@ export interface AppConfig {
     minPoolSize: number;
   };
   cors: {
-    origin: string;
+    origins: string[];
   };
 }
 
@@ -22,6 +22,9 @@ export default (): AppConfig => ({
     minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || '20', 10),
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origins: (process.env.CORS_ORIGINS || 'http://localhost:3000')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   },
 });

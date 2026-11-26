@@ -7,11 +7,13 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "test": "node --test -r ts-node/register test/*.test.js",
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "ts-node src/main.ts",
     "start:dev": "ts-node-dev --respawn --transpile-only src/main.ts",
     "start:prod": "node dist/main",
-    "seed": "ts-node src/database/seed.ts"
+    "seed": "ts-node src/database/seed.ts",
+    "migrate:order-ownership": "ts-node src/database/migrate-order-ownership.ts"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { BaseMongoRepository } from '../../../common/repositories/base-mongo.repository';
 import { User, UserDocument } from '../schemas/user.schema';
+import { ShippingAddress } from '../../orders/schemas/order.schema';
 import { IUserRepository } from '../interfaces/user-repository.interface';
 
 @Injectable()
@@ -29,7 +30,7 @@ export class UserRepository
     return this.userModel.findOne({ email: email.toLowerCase() }).lean<User>().exec();
   }
 
-  async addShippingAddress(userId: string, address: any): Promise<User | null> {
+  async addShippingAddress(userId: string, address: ShippingAddress): Promise<User | null> {
     return this.userModel
       .findByIdAndUpdate(
         userId,

@@ -21,6 +21,8 @@ import { UpdateUserDto } from '../dto/update-user.dto';
 import { ShippingAddressDto } from '../../orders/dto/create-order.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
+import { RolesGuard } from '../../auth/guards/roles.guard';
+import { Roles } from '../../auth/decorators/roles.decorator';
 
 /**
  * Single Responsibility Principle (SRP):
@@ -73,8 +75,8 @@ export class UserController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'لیست تمام سفارش‌های مشتری جاری' })
-  async getMyOrders(@CurrentUser('phoneNumber') phone: string) {
-    return this.orderQueryService.getCustomerOrders(phone);
+  async getMyOrders(@CurrentUser('id') userId: string) {
+    return this.orderQueryService.getOrdersForUser(userId);
   }
 
   @Post('me/addresses')
@@ -113,24 +115,32 @@ export class UserController {
   // --- Legacy / Admin endpoints ---
 
   @Get('profile/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'مشاهده مشخصات کاربر با شناسه' })
   async getProfile(@Param('id') id: string) {
     return this.queryService.getUserById(id);
   }
 
   @Put('profile/:id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'ویرایش مشخصات کاربر با شناسه' })
   async updateProfile(@Param('id') id: string, @Body() dto: UpdateUserDto) {
     return this.commandService.updateProfile(id, dto);
   }
 
   @Post(':id/addresses')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'افزودن آدرس پستی با شناسه' })
   async addAddress(@Param('id') id: string, @Body() addressDto: ShippingAddressDto) {
     return this.commandService.addAddress(id, addressDto);
   }
 
   @Post(':id/favorites/:productId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'علاقه‌مندی با شناسه' })
   async toggleFavorite(
     @Param('id') id: string,
@@ -140,6 +150,8 @@ export class UserController {
   }
 
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'لیست کاربران (ادمین)' })
   async getAllUsers(
     @Query('page') page?: number,

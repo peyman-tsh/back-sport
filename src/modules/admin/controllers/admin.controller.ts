@@ -28,6 +28,7 @@ import { FilterOrdersDto } from '../../orders/dto/filter-orders.dto';
 import { OrderStatus } from '../../orders/schemas/order.schema';
 import { UserQueryService } from '../../users/services/user-query.service';
 import { ProductCommandService } from '../../products/services/product-command.service';
+import { UpdateProductDto } from '../../products/dto/update-product.dto';
 import { CreateProductDto } from '../../products/dto/create-product.dto';
 
 /**
@@ -137,7 +138,7 @@ export class AdminController {
   @ApiOperation({ summary: 'ویرایش مشخصات کالا' })
   async updateProduct(
     @Param('id') id: string,
-    @Body() dto: Partial<CreateProductDto>,
+    @Body() dto: UpdateProductDto,
   ) {
     return this.productCommandService.updateProduct(id, dto);
   }

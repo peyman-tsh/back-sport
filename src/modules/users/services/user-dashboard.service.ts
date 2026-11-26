@@ -32,7 +32,7 @@ export class UserDashboardService implements IUserDashboardService {
       throw new NotFoundException(`کاربری با شناسه ${userId} یافت نشد.`);
     }
 
-    const orders = await this.orderRepository.findByCustomerPhone(user.phoneNumber);
+    const orders = await this.orderRepository.findByUserId(userId);
 
     const stats = this.calculateCustomerStats(user, orders);
     const recentOrders = orders.slice(0, 5);
